@@ -124,7 +124,7 @@ export default {
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- 使用 postal-mime 在前端解析原始邮件 -->
   <script src="https://cdn.jsdelivr.net/npm/postal-mime@2.2.14/dist/postal-mime.js"></script>
-  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 </head>
 <body class="bg-gray-100 p-4 md:p-8">
   <div id="app" class="max-w-4xl mx-auto">
@@ -306,7 +306,8 @@ export default {
             console.log('Received data:', data);
             
             // 使用 postal-mime 解析原始邮件
-            const parser = new PostalMime();
+            // 注意：postal-mime 2.x 版本的全局变量是 postalMime，而不是 PostalMime
+            const parser = new postalMime.default();
             for (let i = 0; i < data.length; i++) {
               data[i].showRaw = false; // 默认不显示原文
               try {
