@@ -65,16 +65,36 @@ export default {
     <div class="bg-white p-6 rounded-lg shadow-md mb-6">
       <div class="flex flex-col md:flex-row gap-4 items-center">
         <div class="flex flex-1 w-full items-center border rounded overflow-hidden">
-          <input v-model="prefix" placeholder="输入自定义前缀" class="flex-1 p-3 outline-none">
-          <span class="bg-gray-50 p-3 text-gray-600 border-l">@{{ domain }}</span>
+          <input v-model="prefix" @change="handlePrefixChange" placeholder="输入自定义前缀" class="flex-1 p-3 outline-none font-mono">
+          <span class="bg-gray-50 p-3 text-gray-600 border-l font-mono">@{{ domain }}</span>
         </div>
-        <button @click="fetchEmails" class="w-full md:w-auto bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600 transition font-medium">
-          刷新收件箱
-        </button>
+        <div class="flex gap-2 w-full md:w-auto">
+          <button @click="generateRandom" class="flex-1 md:flex-none bg-gray-200 text-gray-700 px-4 py-3 rounded hover:bg-gray-300 transition font-medium">
+            🎲 随机
+          </button>
+          <button @click="fetchEmails" class="flex-1 md:flex-none bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600 transition font-medium">
+            刷新收件箱
+          </button>
+        </div>
       </div>
       <p class="text-sm text-gray-500 mt-3 text-center md:text-left">
         你的完整邮箱地址: <span class="font-mono font-bold text-gray-800">{{ fullAddress }}</span>
       </p>
+
+      <!-- 历史记录区 -->
+      <div v-if="history.length > 0" class="mt-5 pt-4 border-t">
+        <p class="text-sm text-gray-500 mb-2">最近使用的邮箱 (保存在本地):</p>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button v-for="h in history" :key="h" @click="selectHistory(h)" 
+                  class="px-3 py-1.5 text-sm bg-gray-50 hover:bg-gray-200 rounded-md border transition font-mono"
+                  :class="{'bg-blue-50 border-blue-300 text-blue-700': prefix === h}">
+            {{ h }}
+          </button>
+          <button @click="clearHistory" class="px-2 py-1 text-xs text-red-400 hover:text-red-600 transition ml-auto">
+            清空历史
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 邮件列表区 -->
@@ -109,14 +129,55 @@ export default {
     
     createApp({
       setup() {
-        // 随机生成一个 6 位字符作为默认前缀
-        const prefix = ref(Math.random().toString(36).substring(2, 8));
+        const prefix = ref('');
         // 从 Worker 环境变量注入的域名
         const domain = '${env.DOMAIN || 'example.com'}';
         const emails = ref([]);
         const loading = ref(false);
+        const history = ref([]);
         
         const fullAddress = computed(() => prefix.value + '@' + domain);
+
+        // 加载历史记录
+        const loadHistory = () => {
+          const saved = localStorage.getItem('temp_mail_history');
+          if (saved) {
+            try { history.value = JSON.parse(saved); } catch(e){}
+          }
+        };
+
+        // 保存到历史记录
+        const saveToHistory = (p) => {
+          if (!p) return;
+          let arr = history.value.filter(x => x !== p);
+          arr.unshift(p);
+          if (arr.length > 10) arr = arr.slice(0, 10); // 最多保留10个
+          history.value = arr;
+          localStorage.setItem('temp_mail_history', JSON.stringify(arr));
+        };
+
+        const clearHistory = () => {
+          history.value = [];
+          localStorage.removeItem('temp_mail_history');
+        };
+
+        const selectHistory = (h) => {
+          prefix.value = h;
+          handlePrefixChange();
+        };
+
+        const generateRandom = () => {
+          prefix.value = Math.random().toString(36).substring(2, 8);
+          handlePrefixChange();
+        };
+
+        const handlePrefixChange = () => {
+          if (prefix.value) {
+            saveToHistory(prefix.value);
+            emails.value = [];
+            fetchEmails();
+          }
+        };
 
         const fetchEmails = async () => {
           if (!prefix.value) return;
@@ -141,19 +202,25 @@ export default {
           loading.value = false;
         };
 
-        // 当邮箱前缀改变时，自动刷新
-        watch(prefix, () => {
-          emails.value = [];
-          fetchEmails();
-        });
-
         onMounted(() => {
+          loadHistory();
+          // 如果有历史记录，默认使用上一次的邮箱；否则生成一个随机的
+          if (history.value.length > 0) {
+            prefix.value = history.value[0];
+          } else {
+            prefix.value = Math.random().toString(36).substring(2, 8);
+            saveToHistory(prefix.value);
+          }
+          
           fetchEmails();
           // 每 10 秒自动刷新一次
           setInterval(fetchEmails, 10000);
         });
 
-        return { prefix, domain, fullAddress, emails, loading, fetchEmails }
+        return { 
+          prefix, domain, fullAddress, emails, loading, history,
+          fetchEmails, generateRandom, selectHistory, clearHistory, handlePrefixChange
+        }
       }
     }).mount('#app')
   </script>

@@ -3,6 +3,7 @@ main = "worker.js"
 compatibility_date = "2024-01-01"
 
 [vars]
+DOMAIN = "mail.gyf123.dpdns.org"
 
 
 [[d1_databases]]
