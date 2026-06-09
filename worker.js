@@ -123,6 +123,8 @@ export default {
   <title>极简临时邮箱</title>
   <!-- 替换 Tailwind CDN 为生产环境可用的预编译 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <!-- 引入一个极其稳定且支持浏览器直接使用的邮件解析库 letterparser -->
+  <script src="https://cdn.jsdelivr.net/npm/letterparser@2.0.1/lib/letterparser.min.js"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 </head>
 <body class="bg-gray-100 p-4 md:p-8">
@@ -228,8 +230,7 @@ export default {
     </div>
   </div>
 
-  <script type="module">
-    import PostalMime from 'https://esm.sh/postal-mime@2.3.11';
+  <script>
     const { createApp, ref, computed, onMounted, watch } = Vue;
     
     createApp({
@@ -305,21 +306,28 @@ export default {
             const data = await res.json();
             console.log('Received data:', data);
             
-            // 使用 postal-mime 解析邮件
-            for (let i = 0; i < data.length; i++) {
-              data[i].showRaw = false;
-              try {
-                const parser = new PostalMime();
-                const parsed = await parser.parse(data[i].raw_email);
-                data[i].parsed = {
-                  subject: parsed.subject || data[i].subject,
-                  from: parsed.from || { address: data[i].from },
-                  text: parsed.text || '',
-                  html: parsed.html || null
-                };
-              } catch (e) {
-                console.error('postal-mime error:', e);
-                // 降级到自己写的极简解析
+            // 尝试使用 letterparser 解析邮件
+            if (typeof letterparser !== 'undefined') {
+              for (let i = 0; i < data.length; i++) {
+                data[i].showRaw = false;
+                try {
+                  const parsed = letterparser.extract(data[i].raw_email);
+                  data[i].parsed = {
+                    subject: data[i].subject, // 优先用后端提取的
+                    from: { address: data[i].from },
+                    text: parsed.text || '',
+                    html: parsed.html || null
+                  };
+                } catch (e) {
+                  console.error('Letterparser error:', e);
+                  // 降级到自己写的极简解析
+                  data[i].parsed = fallbackParse(data[i]);
+                }
+              }
+            } else {
+              console.error('Letterparser library not found');
+              for (let i = 0; i < data.length; i++) {
+                data[i].showRaw = false;
                 data[i].parsed = fallbackParse(data[i]);
               }
             }
