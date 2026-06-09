@@ -27,7 +27,7 @@ export default {
     
     // API: 获取某个邮箱地址的邮件列表 (供前端和外部项目使用)
     if (request.method === 'GET' && url.pathname === '/api/emails') {
-      const address = (url.searchParams.get('address') || '').toLowerCase();
+      const address = (url.searchParams.get('address') || '').toLowerCase().trim();
       if (!address) {
         return new Response(JSON.stringify({ error: 'Missing address parameter' }), { 
           status: 400,
@@ -36,9 +36,10 @@ export default {
       }
       
       try {
+        // 使用 LIKE 模糊匹配，防止数据库中存的地址带有隐藏字符或尖括号（如 <test@...>）导致精确匹配失败
         const { results } = await env.DB.prepare(
-          "SELECT id, created_at, raw_email FROM emails WHERE address = ? ORDER BY id DESC LIMIT 50"
-        ).bind(address).all();
+          "SELECT id, created_at, raw_email FROM emails WHERE address LIKE ? ORDER BY id DESC LIMIT 50"
+        ).bind(`%${address}%`).all();
         
         // 如果是外部项目调用，我们可以在后端做一些简单的正则提取，方便外部直接使用
         // 注意：完整的解析还是在前端做比较好，这里只做简单的文本提取
@@ -80,15 +81,15 @@ export default {
     // API: 删除某封邮件
     if (request.method === 'DELETE' && url.pathname === '/api/emails') {
       const id = url.searchParams.get('id');
-      const address = (url.searchParams.get('address') || '').toLowerCase();
+      const address = (url.searchParams.get('address') || '').toLowerCase().trim();
       if (!id || !address) {
         return new Response('Missing parameters', { status: 400 });
       }
       
       try {
         await env.DB.prepare(
-          "DELETE FROM emails WHERE id = ? AND address = ?"
-        ).bind(id, address).run();
+          "DELETE FROM emails WHERE id = ? AND address LIKE ?"
+        ).bind(id, `%${address}%`).run();
         
         return new Response(JSON.stringify({ success: true }), {
           headers: { 
@@ -345,8 +346,8 @@ export default {
           }
           
           fetchEmails();
-          // 每 10 秒自动刷新一次
-          setInterval(fetchEmails, 10000);
+          // 取消自动刷新，改为纯手动刷新
+          // setInterval(fetchEmails, 10000);
         });
 
         return { 
