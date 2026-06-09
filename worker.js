@@ -37,9 +37,11 @@ export default {
       
       try {
         // 使用 LIKE 模糊匹配，防止数据库中存的地址带有隐藏字符或尖括号（如 <test@...>）导致精确匹配失败
+        // 并且只匹配前缀，忽略域名部分，这样无论数据库存的是 @mail.gyf123.dpdns.org 还是 @gyf123.dpdns.org 都能查出来
+        const prefix = address.split('@')[0];
         const { results } = await env.DB.prepare(
           "SELECT id, created_at, raw_email FROM emails WHERE address LIKE ? ORDER BY id DESC LIMIT 50"
-        ).bind(`%${address}%`).all();
+        ).bind(`${prefix}@%`).all();
         
         // 如果是外部项目调用，我们可以在后端做一些简单的正则提取，方便外部直接使用
         // 注意：完整的解析还是在前端做比较好，这里只做简单的文本提取
@@ -87,9 +89,10 @@ export default {
       }
       
       try {
+        const prefix = address.split('@')[0];
         await env.DB.prepare(
           "DELETE FROM emails WHERE id = ? AND address LIKE ?"
-        ).bind(id, `%${address}%`).run();
+        ).bind(id, `${prefix}@%`).run();
         
         return new Response(JSON.stringify({ success: true }), {
           headers: { 
