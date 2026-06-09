@@ -121,9 +121,11 @@ export default {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>极简临时邮箱</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 替换 Tailwind CDN 为生产环境可用的预编译 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <!-- 使用 postal-mime 在前端解析原始邮件 -->
-  <script src="https://cdn.jsdelivr.net/npm/postal-mime@1.0.16/dist/postal-mime.js"></script>
+  <!-- 尝试使用 unpkg 提供的 UMD 构建版本 -->
+  <script src="https://unpkg.com/postal-mime/dist/postal-mime.js"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 </head>
 <body class="bg-gray-100 p-4 md:p-8">
@@ -306,8 +308,27 @@ export default {
             console.log('Received data:', data);
             
             // 使用 postal-mime 解析原始邮件
-            // 降级到 1.x 版本，全局变量是 PostalMime
-            const parser = new PostalMime();
+            // 尝试获取全局变量，兼容不同版本的导出方式
+            const ParserClass = window.PostalMime || (window.postalMime && window.postalMime.default) || window.postalMime;
+            
+            if (!ParserClass) {
+              console.error('PostalMime library not found on window object');
+              // 如果前端解析库加载失败，我们依然展示后端提取的基础信息
+              for (let i = 0; i < data.length; i++) {
+                data[i].showRaw = false;
+                data[i].parsed = {
+                  subject: data[i].subject,
+                  from: { address: data[i].from },
+                  text: '邮件正文解析库加载失败，请点击"查看原文"查看邮件内容。',
+                  html: null
+                };
+              }
+              emails.value = data;
+              loading.value = false;
+              return;
+            }
+
+            const parser = new ParserClass();
             
             for (let i = 0; i < data.length; i++) {
               data[i].showRaw = false; // 默认不显示原文
