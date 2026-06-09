@@ -10,6 +10,7 @@ export default {
       address = `${prefix}@${targetDomain}`;
       
       // 读取邮件的原始文本流
+      // 注意：根据 Cloudflare 文档，message.raw 是一个 ReadableStream
       const rawEmail = await new Response(message.raw).text();
       
       // 存入 D1 数据库
@@ -36,12 +37,18 @@ export default {
       }
       
       try {
-        // 使用 LIKE 模糊匹配，防止数据库中存的地址带有隐藏字符或尖括号（如 <test@...>）导致精确匹配失败
-        // 并且只匹配前缀，忽略域名部分，这样无论数据库存的是 @mail.gyf123.dpdns.org 还是 @gyf123.dpdns.org 都能查出来
+        // 提取前缀，比如从 test@gyf123.dpdns.org 提取出 test
         const prefix = address.split('@')[0];
+        
+        // 打印日志，方便在 Cloudflare 控制台查看
+        console.log(`Fetching emails for prefix: ${prefix}`);
+        
+        // 使用 LIKE 模糊匹配，匹配任何以 test@ 开头的地址
         const { results } = await env.DB.prepare(
           "SELECT id, created_at, raw_email FROM emails WHERE address LIKE ? ORDER BY id DESC LIMIT 50"
         ).bind(`${prefix}@%`).all();
+        
+        console.log(`Found ${results.length} emails for ${prefix}`);
         
         // 如果是外部项目调用，我们可以在后端做一些简单的正则提取，方便外部直接使用
         // 注意：完整的解析还是在前端做比较好，这里只做简单的文本提取
@@ -293,8 +300,10 @@ export default {
           if (!prefix.value) return;
           loading.value = true;
           try {
+            console.log('Fetching from:', '/api/emails?address=' + fullAddress.value);
             const res = await fetch('/api/emails?address=' + fullAddress.value);
             const data = await res.json();
+            console.log('Received data:', data);
             
             // 使用 postal-mime 解析原始邮件
             const parser = new PostalMime();
