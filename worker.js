@@ -355,7 +355,8 @@ export default {
           let fallbackText = '邮件正文解析库加载失败，请点击"查看原文"查看邮件内容。';
           try {
             const raw = emailData.raw_email || '';
-            const textPartMatch = raw.match(/Content-Type:\s*text\/plain[\s\S]*?\r?\n\r?\n([\s\S]*?)(?=\r?\n--|\r?\n\r?\n--|$)/i);
+            // 修复了正则表达式，移除了可能导致语法错误的复杂前瞻断言
+            const textPartMatch = raw.match(/Content-Type:\s*text\/plain[\s\S]*?\r?\n\r?\n([\s\S]*?)(?=\r?\n--|$)/i);
             if (textPartMatch && textPartMatch[1]) {
               let content = textPartMatch[1].trim();
               if (raw.match(/Content-Transfer-Encoding:\s*base64/i)) {
