@@ -1,0 +1,170 @@
+export default {
+  // 处理接收到的邮件 (Cloudflare Email Routing 触发)
+  async email(message, env, ctx) {
+    try {
+      const address = message.to;
+      // 读取邮件的原始文本流
+      const rawEmail = await new Response(message.raw).text();
+      
+      // 存入 D1 数据库 (兼容旧版 raw_mails 表)
+      await env.DB.prepare(
+        "INSERT INTO raw_mails (address, raw) VALUES (?, ?)"
+      ).bind(address, rawEmail).run();
+    } catch (error) {
+      console.error("Failed to process email:", error);
+    }
+  },
+
+  // 处理 HTTP 请求 (前端页面和 API)
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    
+    // API: 获取某个邮箱地址的邮件列表
+    if (url.pathname === '/api/emails') {
+      const address = url.searchParams.get('address');
+      if (!address) {
+        return new Response('Missing address parameter', { status: 400 });
+      }
+      
+      try {
+        // 兼容旧版 raw_mails 表结构
+        const { results } = await env.DB.prepare(
+          "SELECT id, created_at, raw as raw_email FROM raw_mails WHERE address = ? ORDER BY id DESC LIMIT 50"
+        ).bind(address).all();
+        
+        return new Response(JSON.stringify(results), {
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          }
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+      }
+    }
+
+    // 前端: 返回极简的 HTML 页面
+    if (url.pathname === '/') {
+      const html = `
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>极简临时邮箱</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 使用 postal-mime 在前端解析原始邮件 -->
+  <script src="https://cdn.jsdelivr.net/npm/postal-mime@2.2.14/dist/postal-mime.js"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+<body class="bg-gray-100 p-4 md:p-8">
+  <div id="app" class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold mb-6 text-center text-gray-800">极简临时邮箱</h1>
+    
+    <!-- 邮箱地址控制区 -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+      <div class="flex flex-col md:flex-row gap-4 items-center">
+        <div class="flex flex-1 w-full items-center border rounded overflow-hidden">
+          <input v-model="prefix" placeholder="输入自定义前缀" class="flex-1 p-3 outline-none">
+          <span class="bg-gray-50 p-3 text-gray-600 border-l">@{{ domain }}</span>
+        </div>
+        <button @click="fetchEmails" class="w-full md:w-auto bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600 transition font-medium">
+          刷新收件箱
+        </button>
+      </div>
+      <p class="text-sm text-gray-500 mt-3 text-center md:text-left">
+        你的完整邮箱地址: <span class="font-mono font-bold text-gray-800">{{ fullAddress }}</span>
+      </p>
+    </div>
+
+    <!-- 邮件列表区 -->
+    <div class="space-y-4">
+      <div v-if="loading" class="text-center text-gray-500 py-8">正在获取邮件...</div>
+      <div v-else-if="emails.length === 0" class="text-center text-gray-500 py-8 bg-white rounded-lg shadow-sm">
+        收件箱为空，等待邮件到达...
+      </div>
+      
+      <div v-for="email in emails" :key="email.id" class="bg-white p-6 rounded-lg shadow-md overflow-hidden">
+        <div class="flex flex-col md:flex-row justify-between border-b pb-3 mb-4 gap-2">
+          <div>
+            <p class="font-bold text-lg text-gray-800">{{ email.parsed?.subject || '无主题' }}</p>
+            <p class="text-sm text-gray-600 mt-1">发件人: <span class="font-mono">{{ email.parsed?.from?.address || '未知' }}</span></p>
+          </div>
+          <div class="text-sm text-gray-500 md:text-right">
+            {{ new Date(email.created_at).toLocaleString() }}
+          </div>
+        </div>
+        <!-- 邮件内容展示 -->
+        <div class="prose max-w-none overflow-x-auto">
+          <iframe v-if="email.parsed?.html" :srcdoc="email.parsed.html" class="w-full min-h-[300px] border-0" sandbox="allow-same-origin"></iframe>
+          <pre v-else-if="email.parsed?.text" class="whitespace-pre-wrap font-sans text-gray-700">{{ email.parsed.text }}</pre>
+          <div v-else class="text-gray-400 italic">正在解析邮件内容...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, computed, onMounted, watch } = Vue;
+    
+    createApp({
+      setup() {
+        // 随机生成一个 6 位字符作为默认前缀
+        const prefix = ref(Math.random().toString(36).substring(2, 8));
+        // 从 Worker 环境变量注入的域名
+        const domain = '${env.DOMAIN || 'example.com'}';
+        const emails = ref([]);
+        const loading = ref(false);
+        
+        const fullAddress = computed(() => prefix.value + '@' + domain);
+
+        const fetchEmails = async () => {
+          if (!prefix.value) return;
+          loading.value = true;
+          try {
+            const res = await fetch('/api/emails?address=' + fullAddress.value);
+            const data = await res.json();
+            
+            // 使用 postal-mime 解析原始邮件
+            const parser = new PostalMime();
+            for (let i = 0; i < data.length; i++) {
+              try {
+                data[i].parsed = await parser.parse(data[i].raw_email);
+              } catch (e) {
+                console.error('Parse error for email', data[i].id, e);
+              }
+            }
+            emails.value = data;
+          } catch (e) {
+            console.error('获取邮件失败', e);
+          }
+          loading.value = false;
+        };
+
+        // 当邮箱前缀改变时，自动刷新
+        watch(prefix, () => {
+          emails.value = [];
+          fetchEmails();
+        });
+
+        onMounted(() => {
+          fetchEmails();
+          // 每 10 秒自动刷新一次
+          setInterval(fetchEmails, 10000);
+        });
+
+        return { prefix, domain, fullAddress, emails, loading, fetchEmails }
+      }
+    }).mount('#app')
+  </script>
+</body>
+</html>
+      `;
+      return new Response(html, { 
+        headers: { 'Content-Type': 'text/html;charset=UTF-8' } 
+      });
+    }
+
+    return new Response('Not Found', { status: 404 });
+  }
+};
