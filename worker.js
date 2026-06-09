@@ -123,9 +123,8 @@ export default {
   <title>极简临时邮箱</title>
   <!-- 替换 Tailwind CDN 为生产环境可用的预编译 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-  <!-- 使用 postal-mime 在前端解析原始邮件 -->
-  <!-- 尝试使用 unpkg 提供的 UMD 构建版本 -->
-  <script src="https://unpkg.com/postal-mime/dist/postal-mime.js"></script>
+  <!-- 引入一个极其稳定且支持浏览器直接使用的邮件解析库 letterparser -->
+  <script src="https://cdn.jsdelivr.net/npm/letterparser@2.0.1/lib/letterparser.min.js"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 </head>
 <body class="bg-gray-100 p-4 md:p-8">
@@ -307,50 +306,70 @@ export default {
             const data = await res.json();
             console.log('Received data:', data);
             
-            // 使用 postal-mime 解析原始邮件
-            // 尝试获取全局变量，兼容不同版本的导出方式
-            const ParserClass = window.PostalMime || (window.postalMime && window.postalMime.default) || window.postalMime;
-            
-            if (!ParserClass) {
-              console.error('PostalMime library not found on window object');
-              // 如果前端解析库加载失败，我们依然展示后端提取的基础信息
+            // 尝试使用 letterparser 解析邮件
+            if (typeof letterparser !== 'undefined') {
               for (let i = 0; i < data.length; i++) {
                 data[i].showRaw = false;
-                data[i].parsed = {
-                  subject: data[i].subject,
-                  from: { address: data[i].from },
-                  text: '邮件正文解析库加载失败，请点击"查看原文"查看邮件内容。',
-                  html: null
-                };
-              }
-              emails.value = data;
-              loading.value = false;
-              return;
-            }
-
-            const parser = new ParserClass();
-            
-            for (let i = 0; i < data.length; i++) {
-              data[i].showRaw = false; // 默认不显示原文
-              try {
-                data[i].parsed = await parser.parse(data[i].raw_email);
-                // 如果后端没有提取到验证码，前端再尝试提取一次
-                if (!data[i].verificationCode) {
-                  const contentToScan = data[i].parsed.text || data[i].parsed.html || '';
-                  const cleanText = contentToScan.replace(/<[^>]*>?/gm, ' ');
-                  const match = cleanText.match(/(?:验证码|code|Code|CODE|passcode|token|pin)[\s:：]*([a-zA-Z0-9]{4,8})\b/i);
-                  const fallbackMatch = cleanText.match(/\b(\d{4,8})\b/);
-                  data[i].verificationCode = match ? match[1] : (fallbackMatch ? fallbackMatch[1] : null);
+                try {
+                  const parsed = letterparser.extract(data[i].raw_email);
+                  data[i].parsed = {
+                    subject: data[i].subject, // 优先用后端提取的
+                    from: { address: data[i].from },
+                    text: parsed.text || '',
+                    html: parsed.html || null
+                  };
+                } catch (e) {
+                  console.error('Letterparser error:', e);
+                  // 降级到自己写的极简解析
+                  data[i].parsed = fallbackParse(data[i]);
                 }
-              } catch (e) {
-                console.error('Parse error for email', data[i].id, e);
+              }
+            } else {
+              console.error('Letterparser library not found');
+              for (let i = 0; i < data.length; i++) {
+                data[i].showRaw = false;
+                data[i].parsed = fallbackParse(data[i]);
               }
             }
+            
+            // 提取验证码逻辑
+            for (let i = 0; i < data.length; i++) {
+              if (!data[i].verificationCode && data[i].parsed) {
+                const contentToScan = data[i].parsed.text || data[i].parsed.html || '';
+                const cleanText = contentToScan.replace(/<[^>]*>?/gm, ' ');
+                const match = cleanText.match(/(?:验证码|code|Code|CODE|passcode|token|pin)[\s:：]*([a-zA-Z0-9]{4,8})\b/i);
+                const fallbackMatch = cleanText.match(/\b(\d{4,8})\b/);
+                data[i].verificationCode = match ? match[1] : (fallbackMatch ? fallbackMatch[1] : null);
+              }
+            }
+            
             emails.value = data;
           } catch (e) {
             console.error('获取邮件失败', e);
           }
           loading.value = false;
+        };
+
+        // 极简的后备解析函数
+        const fallbackParse = (emailData) => {
+          let fallbackText = '邮件正文解析库加载失败，请点击"查看原文"查看邮件内容。';
+          try {
+            const raw = emailData.raw_email || '';
+            const textPartMatch = raw.match(/Content-Type:\s*text\/plain[\s\S]*?\r?\n\r?\n([\s\S]*?)(?=\r?\n--|\r?\n\r?\n--|$)/i);
+            if (textPartMatch && textPartMatch[1]) {
+              let content = textPartMatch[1].trim();
+              if (raw.match(/Content-Transfer-Encoding:\s*base64/i)) {
+                try { content = decodeURIComponent(escape(atob(content.replace(/\s/g, '')))); } catch(e) {}
+              }
+              fallbackText = content;
+            }
+          } catch(e) {}
+          return {
+            subject: emailData.subject,
+            from: { address: emailData.from },
+            text: fallbackText,
+            html: null
+          };
         };
 
         // 删除邮件
