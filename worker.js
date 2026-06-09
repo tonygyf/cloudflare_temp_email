@@ -2,13 +2,19 @@ export default {
   // 处理接收到的邮件 (Cloudflare Email Routing 触发)
   async email(message, env, ctx) {
     try {
-      const address = message.to;
+      // 无论发件人发给哪个子域名，我们都统一将后缀替换为环境变量中的 DOMAIN
+      // 例如：发给 test@mail.gyf123.dpdns.org，存入数据库时会变成 test@gyf123.dpdns.org
+      let address = message.to.toLowerCase();
+      const prefix = address.split('@')[0];
+      const targetDomain = (env.DOMAIN || 'gyf123.dpdns.org').toLowerCase();
+      address = `${prefix}@${targetDomain}`;
+      
       // 读取邮件的原始文本流
       const rawEmail = await new Response(message.raw).text();
       
-      // 存入 D1 数据库 (兼容旧版 raw_mails 表)
+      // 存入 D1 数据库
       await env.DB.prepare(
-        "INSERT INTO raw_mails (address, raw) VALUES (?, ?)"
+        "INSERT INTO emails (address, raw_email) VALUES (?, ?)"
       ).bind(address, rawEmail).run();
     } catch (error) {
       console.error("Failed to process email:", error);
@@ -21,7 +27,7 @@ export default {
     
     // API: 获取某个邮箱地址的邮件列表 (供前端和外部项目使用)
     if (request.method === 'GET' && url.pathname === '/api/emails') {
-      const address = url.searchParams.get('address');
+      const address = (url.searchParams.get('address') || '').toLowerCase();
       if (!address) {
         return new Response(JSON.stringify({ error: 'Missing address parameter' }), { 
           status: 400,
@@ -30,9 +36,8 @@ export default {
       }
       
       try {
-        // 兼容旧版 raw_mails 表结构
         const { results } = await env.DB.prepare(
-          "SELECT id, created_at, raw as raw_email FROM raw_mails WHERE address = ? ORDER BY id DESC LIMIT 50"
+          "SELECT id, created_at, raw_email FROM emails WHERE address = ? ORDER BY id DESC LIMIT 50"
         ).bind(address).all();
         
         // 如果是外部项目调用，我们可以在后端做一些简单的正则提取，方便外部直接使用
@@ -75,14 +80,14 @@ export default {
     // API: 删除某封邮件
     if (request.method === 'DELETE' && url.pathname === '/api/emails') {
       const id = url.searchParams.get('id');
-      const address = url.searchParams.get('address');
+      const address = (url.searchParams.get('address') || '').toLowerCase();
       if (!id || !address) {
         return new Response('Missing parameters', { status: 400 });
       }
       
       try {
         await env.DB.prepare(
-          "DELETE FROM raw_mails WHERE id = ? AND address = ?"
+          "DELETE FROM emails WHERE id = ? AND address = ?"
         ).bind(id, address).run();
         
         return new Response(JSON.stringify({ success: true }), {
@@ -226,7 +231,7 @@ export default {
         const history = ref([]);
         const copyStatus = ref({});
         
-        const fullAddress = computed(() => prefix.value + '@' + domain);
+        const fullAddress = computed(() => (prefix.value + '@' + domain).toLowerCase());
 
         // 通用复制功能
         const copyToClipboard = async (text, key) => {
