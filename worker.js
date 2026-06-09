@@ -20,7 +20,7 @@ export default {
     const url = new URL(request.url);
     
     // API: 获取某个邮箱地址的邮件列表
-    if (url.pathname === '/api/emails') {
+    if (request.method === 'GET' && url.pathname === '/api/emails') {
       const address = url.searchParams.get('address');
       if (!address) {
         return new Response('Missing address parameter', { status: 400 });
@@ -33,6 +33,30 @@ export default {
         ).bind(address).all();
         
         return new Response(JSON.stringify(results), {
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          }
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+      }
+    }
+
+    // API: 删除某封邮件
+    if (request.method === 'DELETE' && url.pathname === '/api/emails') {
+      const id = url.searchParams.get('id');
+      const address = url.searchParams.get('address');
+      if (!id || !address) {
+        return new Response('Missing parameters', { status: 400 });
+      }
+      
+      try {
+        await env.DB.prepare(
+          "DELETE FROM raw_mails WHERE id = ? AND address = ?"
+        ).bind(id, address).run();
+        
+        return new Response(JSON.stringify({ success: true }), {
           headers: { 
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'
@@ -77,9 +101,14 @@ export default {
           </button>
         </div>
       </div>
-      <p class="text-sm text-gray-500 mt-3 text-center md:text-left">
-        你的完整邮箱地址: <span class="font-mono font-bold text-gray-800">{{ fullAddress }}</span>
-      </p>
+      <div class="flex items-center justify-center md:justify-start gap-2 mt-3">
+        <p class="text-sm text-gray-500">
+          你的完整邮箱地址: <span class="font-mono font-bold text-gray-800">{{ fullAddress }}</span>
+        </p>
+        <button @click="copyToClipboard(fullAddress, 'address')" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1 rounded transition">
+          {{ copyStatus['address'] || '复制' }}
+        </button>
+      </div>
 
       <!-- 历史记录区 -->
       <div v-if="history.length > 0" class="mt-5 pt-4 border-t">
@@ -104,21 +133,52 @@ export default {
         收件箱为空，等待邮件到达...
       </div>
       
-      <div v-for="email in emails" :key="email.id" class="bg-white p-6 rounded-lg shadow-md overflow-hidden">
+      <div v-for="email in emails" :key="email.id" class="bg-white p-6 rounded-lg shadow-md overflow-hidden relative group">
         <div class="flex flex-col md:flex-row justify-between border-b pb-3 mb-4 gap-2">
-          <div>
+          <div class="pr-8">
             <p class="font-bold text-lg text-gray-800">{{ email.parsed?.subject || '无主题' }}</p>
             <p class="text-sm text-gray-600 mt-1">发件人: <span class="font-mono">{{ email.parsed?.from?.address || '未知' }}</span></p>
           </div>
-          <div class="text-sm text-gray-500 md:text-right">
-            {{ new Date(email.created_at).toLocaleString() }}
+          <div class="text-sm text-gray-500 md:text-right flex flex-col items-end justify-between">
+            <span>{{ new Date(email.created_at).toLocaleString() }}</span>
+            <div class="flex gap-3 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button @click="email.showRaw = !email.showRaw" class="text-gray-500 hover:text-gray-700 transition-colors">
+                📄 {{ email.showRaw ? '隐藏原文' : '查看原文' }}
+              </button>
+              <button @click="deleteEmail(email.id)" class="text-red-500 hover:text-red-700 transition-colors">
+                🗑️ 删除
+              </button>
+            </div>
           </div>
         </div>
+
+        <!-- 智能提取验证码 -->
+        <div v-if="email.verificationCode" class="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-center justify-between">
+          <div>
+            <span class="text-blue-800 font-bold text-sm">提取到的验证码：</span>
+            <span class="text-2xl font-mono text-blue-600 ml-2 tracking-widest">{{ email.verificationCode }}</span>
+          </div>
+          <button @click="copyToClipboard(email.verificationCode, 'code_' + email.id)" class="text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded transition">
+            {{ copyStatus['code_' + email.id] || '复制' }}
+          </button>
+        </div>
+
         <!-- 邮件内容展示 -->
-        <div class="prose max-w-none overflow-x-auto">
+        <div v-show="!email.showRaw" class="prose max-w-none overflow-x-auto">
           <iframe v-if="email.parsed?.html" :srcdoc="email.parsed.html" class="w-full min-h-[300px] border-0" sandbox="allow-same-origin"></iframe>
           <pre v-else-if="email.parsed?.text" class="whitespace-pre-wrap font-sans text-gray-700">{{ email.parsed.text }}</pre>
           <div v-else class="text-gray-400 italic">正在解析邮件内容...</div>
+        </div>
+
+        <!-- 邮件原文展示 (EML) -->
+        <div v-show="email.showRaw" class="mt-2 p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed">
+          <div class="flex justify-between mb-2 border-b border-gray-700 pb-2">
+            <span class="text-gray-400">原始邮件数据 (EML)</span>
+            <button @click="copyToClipboard(email.raw_email, 'raw_' + email.id)" class="text-gray-300 hover:text-white">
+              {{ copyStatus['raw_' + email.id] || '复制原文' }}
+            </button>
+          </div>
+          <pre class="whitespace-pre-wrap break-all">{{ email.raw_email }}</pre>
         </div>
       </div>
     </div>
@@ -135,8 +195,34 @@ export default {
         const emails = ref([]);
         const loading = ref(false);
         const history = ref([]);
+        const copyStatus = ref({});
         
         const fullAddress = computed(() => prefix.value + '@' + domain);
+
+        // 通用复制功能
+        const copyToClipboard = async (text, key) => {
+          try {
+            await navigator.clipboard.writeText(text);
+            copyStatus.value[key] = '已复制!';
+            setTimeout(() => copyStatus.value[key] = undefined, 2000);
+          } catch (err) {
+            console.error('复制失败', err);
+          }
+        };
+
+        // 提取验证码逻辑
+        const extractVerificationCode = (text) => {
+          if (!text) return null;
+          // 移除 HTML 标签，提取纯文本
+          const cleanText = text.replace(/<[^>]*>?/gm, ' ');
+          // 匹配常见的验证码前缀 + 4到8位数字/字母
+          const match = cleanText.match(/(?:验证码|code|Code|CODE|passcode|token|pin)[\s:：]*([a-zA-Z0-9]{4,8})\b/i);
+          if (match) return match[1];
+          // 降级：如果邮件很短，直接找 4-8 位数字
+          const fallbackMatch = cleanText.match(/\b(\d{4,8})\b/);
+          if (fallbackMatch) return fallbackMatch[1];
+          return null;
+        };
 
         // 加载历史记录
         const loadHistory = () => {
@@ -189,8 +275,12 @@ export default {
             // 使用 postal-mime 解析原始邮件
             const parser = new PostalMime();
             for (let i = 0; i < data.length; i++) {
+              data[i].showRaw = false; // 默认不显示原文
               try {
                 data[i].parsed = await parser.parse(data[i].raw_email);
+                // 尝试提取验证码
+                const contentToScan = data[i].parsed.text || data[i].parsed.html || '';
+                data[i].verificationCode = extractVerificationCode(contentToScan);
               } catch (e) {
                 console.error('Parse error for email', data[i].id, e);
               }
@@ -200,6 +290,23 @@ export default {
             console.error('获取邮件失败', e);
           }
           loading.value = false;
+        };
+
+        // 删除邮件
+        const deleteEmail = async (id) => {
+          if (!confirm('确定要删除这封邮件吗？')) return;
+          try {
+            const res = await fetch('/api/emails?id=' + id + '&address=' + fullAddress.value, {
+              method: 'DELETE'
+            });
+            if (res.ok) {
+              // 从列表中移除
+              emails.value = emails.value.filter(e => e.id !== id);
+            }
+          } catch (e) {
+            console.error('删除失败', e);
+            alert('删除失败');
+          }
         };
 
         onMounted(() => {
@@ -218,8 +325,9 @@ export default {
         });
 
         return { 
-          prefix, domain, fullAddress, emails, loading, history,
-          fetchEmails, generateRandom, selectHistory, clearHistory, handlePrefixChange
+          prefix, domain, fullAddress, emails, loading, history, copyStatus,
+          fetchEmails, generateRandom, selectHistory, clearHistory, handlePrefixChange,
+          copyToClipboard, deleteEmail
         }
       }
     }).mount('#app')
