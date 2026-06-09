@@ -123,11 +123,7 @@ export default {
   <title>极简临时邮箱</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- 使用 postal-mime 在前端解析原始邮件 -->
-  <script src="https://cdn.jsdelivr.net/npm/postal-mime@2.2.14/dist/postal-mime.js"></script>
-  <script>
-    // 兼容处理：如果 postalMime 没有挂载到 window 上，尝试从 PostalMime 获取
-    window.PostalMimeParser = window.postalMime?.default || window.PostalMime || window.postalMime;
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/postal-mime@1.0.16/dist/postal-mime.js"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 </head>
 <body class="bg-gray-100 p-4 md:p-8">
@@ -214,7 +210,7 @@ export default {
 
         <!-- 邮件内容展示 -->
         <div v-show="!email.showRaw" class="prose max-w-none overflow-x-auto">
-          <iframe v-if="email.parsed?.html" :srcdoc="email.parsed.html" class="w-full min-h-[300px] border-0" sandbox="allow-same-origin"></iframe>
+          <iframe v-if="email.parsed?.html" :srcdoc="email.parsed.html" class="w-full min-h-[300px] border-0" sandbox="allow-same-origin allow-popups"></iframe>
           <pre v-else-if="email.parsed?.text" class="whitespace-pre-wrap font-sans text-gray-700">{{ email.parsed.text }}</pre>
           <div v-else class="text-gray-400 italic">正在解析邮件内容...</div>
         </div>
@@ -310,16 +306,8 @@ export default {
             console.log('Received data:', data);
             
             // 使用 postal-mime 解析原始邮件
-            // 使用我们上面定义的兼容变量
-            let parser;
-            if (typeof window.PostalMimeParser === 'function') {
-              parser = new window.PostalMimeParser();
-            } else if (window.PostalMimeParser && typeof window.PostalMimeParser.default === 'function') {
-              parser = new window.PostalMimeParser.default();
-            } else {
-              console.error('PostalMime library not loaded correctly. window.PostalMimeParser:', window.PostalMimeParser);
-              throw new Error('PostalMime is not defined');
-            }
+            // 降级到 1.x 版本，全局变量是 PostalMime
+            const parser = new PostalMime();
             
             for (let i = 0; i < data.length; i++) {
               data[i].showRaw = false; // 默认不显示原文
