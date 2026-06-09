@@ -19,11 +19,14 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     
-    // API: 获取某个邮箱地址的邮件列表
+    // API: 获取某个邮箱地址的邮件列表 (供前端和外部项目使用)
     if (request.method === 'GET' && url.pathname === '/api/emails') {
       const address = url.searchParams.get('address');
       if (!address) {
-        return new Response('Missing address parameter', { status: 400 });
+        return new Response(JSON.stringify({ error: 'Missing address parameter' }), { 
+          status: 400,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
       }
       
       try {
@@ -32,14 +35,40 @@ export default {
           "SELECT id, created_at, raw as raw_email FROM raw_mails WHERE address = ? ORDER BY id DESC LIMIT 50"
         ).bind(address).all();
         
-        return new Response(JSON.stringify(results), {
+        // 如果是外部项目调用，我们可以在后端做一些简单的正则提取，方便外部直接使用
+        // 注意：完整的解析还是在前端做比较好，这里只做简单的文本提取
+        const formattedResults = results.map(row => {
+          const raw = row.raw_email || '';
+          // 简单提取发件人和主题 (从 header 中)
+          const fromMatch = raw.match(/^From:\s*(.+)$/im);
+          const subjectMatch = raw.match(/^Subject:\s*(.+)$/im);
+          
+          // 简单提取验证码 (移除 HTML 标签后匹配)
+          const cleanText = raw.replace(/<[^>]*>?/gm, ' ');
+          const codeMatch = cleanText.match(/(?:验证码|code|Code|CODE|passcode|token|pin)[\s:：]*([a-zA-Z0-9]{4,8})\b/i) 
+                         || cleanText.match(/\b(\d{4,8})\b/);
+                         
+          return {
+            id: row.id,
+            created_at: row.created_at,
+            from: fromMatch ? fromMatch[1].trim() : 'Unknown',
+            subject: subjectMatch ? subjectMatch[1].trim() : 'No Subject',
+            verificationCode: codeMatch ? codeMatch[1] : null,
+            raw_email: row.raw_email // 保留原文供前端 postal-mime 深度解析
+          };
+        });
+        
+        return new Response(JSON.stringify(formattedResults), {
           headers: { 
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
+            'Access-Control-Allow-Origin': '*' // 允许跨域，方便你的其他项目调用
           }
         });
       } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+        return new Response(JSON.stringify({ error: error.message }), { 
+          status: 500,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
       }
     }
 
@@ -136,8 +165,8 @@ export default {
       <div v-for="email in emails" :key="email.id" class="bg-white p-6 rounded-lg shadow-md overflow-hidden relative group">
         <div class="flex flex-col md:flex-row justify-between border-b pb-3 mb-4 gap-2">
           <div class="pr-8">
-            <p class="font-bold text-lg text-gray-800">{{ email.parsed?.subject || '无主题' }}</p>
-            <p class="text-sm text-gray-600 mt-1">发件人: <span class="font-mono">{{ email.parsed?.from?.address || '未知' }}</span></p>
+            <p class="font-bold text-lg text-gray-800">{{ email.parsed?.subject || email.subject || '无主题' }}</p>
+            <p class="text-sm text-gray-600 mt-1">发件人: <span class="font-mono">{{ email.parsed?.from?.address || email.from || '未知' }}</span></p>
           </div>
           <div class="text-sm text-gray-500 md:text-right flex flex-col items-end justify-between">
             <span>{{ new Date(email.created_at).toLocaleString() }}</span>
@@ -210,20 +239,6 @@ export default {
           }
         };
 
-        // 提取验证码逻辑
-        const extractVerificationCode = (text) => {
-          if (!text) return null;
-          // 移除 HTML 标签，提取纯文本
-          const cleanText = text.replace(/<[^>]*>?/gm, ' ');
-          // 匹配常见的验证码前缀 + 4到8位数字/字母
-          const match = cleanText.match(/(?:验证码|code|Code|CODE|passcode|token|pin)[\s:：]*([a-zA-Z0-9]{4,8})\b/i);
-          if (match) return match[1];
-          // 降级：如果邮件很短，直接找 4-8 位数字
-          const fallbackMatch = cleanText.match(/\b(\d{4,8})\b/);
-          if (fallbackMatch) return fallbackMatch[1];
-          return null;
-        };
-
         // 加载历史记录
         const loadHistory = () => {
           const saved = localStorage.getItem('temp_mail_history');
@@ -278,9 +293,14 @@ export default {
               data[i].showRaw = false; // 默认不显示原文
               try {
                 data[i].parsed = await parser.parse(data[i].raw_email);
-                // 尝试提取验证码
-                const contentToScan = data[i].parsed.text || data[i].parsed.html || '';
-                data[i].verificationCode = extractVerificationCode(contentToScan);
+                // 如果后端没有提取到验证码，前端再尝试提取一次
+                if (!data[i].verificationCode) {
+                  const contentToScan = data[i].parsed.text || data[i].parsed.html || '';
+                  const cleanText = contentToScan.replace(/<[^>]*>?/gm, ' ');
+                  const match = cleanText.match(/(?:验证码|code|Code|CODE|passcode|token|pin)[\s:：]*([a-zA-Z0-9]{4,8})\b/i);
+                  const fallbackMatch = cleanText.match(/\b(\d{4,8})\b/);
+                  data[i].verificationCode = match ? match[1] : (fallbackMatch ? fallbackMatch[1] : null);
+                }
               } catch (e) {
                 console.error('Parse error for email', data[i].id, e);
               }
