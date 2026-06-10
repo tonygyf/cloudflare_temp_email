@@ -18,6 +18,7 @@ export function useMailbox() {
   const pollIntervalMs = ref(15000);
   const prefix = ref('');
   const emails = ref([]);
+  const knownAddresses = ref([]);
   const history = ref([]);
   const loading = ref(false);
   const error = ref('');
@@ -66,6 +67,21 @@ export function useMailbox() {
     pollIntervalMs.value = data.pollIntervalMs || pollIntervalMs.value;
   }
 
+  async function fetchKnownAddresses() {
+    try {
+      const response = await fetch('/api/addresses');
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '获取已有邮箱失败');
+      }
+
+      knownAddresses.value = data;
+    } catch (requestError) {
+      console.error(requestError);
+    }
+  }
+
   async function fetchEmails({ silent = false } = {}) {
     if (!prefix.value) {
       return;
@@ -93,6 +109,7 @@ export function useMailbox() {
         activeEmailId.value = data[0]?.id || null;
       }
       lastUpdatedAt.value = new Date().toLocaleTimeString();
+      await fetchKnownAddresses();
     } catch (requestError) {
       error.value = requestError.message || '获取邮件失败';
     } finally {
@@ -155,6 +172,7 @@ export function useMailbox() {
   onMounted(async () => {
     loadHistory();
     await fetchConfig();
+    await fetchKnownAddresses();
     prefix.value = history.value[0] || randomPrefix();
     persistHistory(prefix.value);
     await fetchEmails();
@@ -176,6 +194,7 @@ export function useMailbox() {
     emails,
     error,
     fetchEmails,
+    knownAddresses,
     fullAddress,
     generateRandomPrefix,
     history,

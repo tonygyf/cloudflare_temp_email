@@ -17,6 +17,7 @@ const {
   fullAddress,
   generateRandomPrefix,
   history,
+  knownAddresses,
   lastUpdatedAt,
   loading,
   prefix,
@@ -111,7 +112,6 @@ async function handleGenerateRandom() {
 
       <div class="address-builder">
         <label class="address-input">
-          <span class="address-prefix">@</span>
           <input
             v-model.trim="prefix"
             type="text"
@@ -119,8 +119,8 @@ async function handleGenerateRandom() {
             placeholder="例如 github-login"
             @keyup.enter="applyCurrentPrefix"
           />
+          <span class="address-suffix">@{{ domain }}</span>
         </label>
-        <div class="domain-pill">{{ domain }}</div>
       </div>
 
       <div class="toolbar-row">
@@ -136,7 +136,7 @@ async function handleGenerateRandom() {
 
       <div class="full-address">
         <span>完整地址</span>
-        <strong>{{ fullAddress }}</strong>
+        <strong class="break-value">{{ fullAddress }}</strong>
       </div>
 
       <div v-if="history.length" class="history-block">
@@ -153,6 +153,25 @@ async function handleGenerateRandom() {
             @click="prefix = item; applyCurrentPrefix()"
           >
             {{ item }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="knownAddresses.length" class="history-block">
+        <div class="history-header">
+          <span>数据库已有邮件的邮箱</span>
+          <small>{{ knownAddresses.length }} 个</small>
+        </div>
+        <div class="history-list">
+          <button
+            v-for="item in knownAddresses"
+            :key="item.address"
+            class="history-chip address-chip"
+            :class="{ active: item.prefix === prefix }"
+            @click="prefix = item.prefix; applyCurrentPrefix()"
+          >
+            <strong>{{ item.address }}</strong>
+            <span>{{ item.emailCount }} 封邮件</span>
           </button>
         </div>
       </div>
@@ -178,10 +197,10 @@ async function handleGenerateRandom() {
           @click="setActiveEmail(email.id)"
         >
           <div class="mail-card-header">
-            <strong>{{ email.subject || '无主题' }}</strong>
+            <strong class="break-value">{{ email.subject || '无主题' }}</strong>
             <span>{{ new Date(email.created_at).toLocaleTimeString() }}</span>
           </div>
-          <p class="mail-from">{{ email.from }}</p>
+          <p class="mail-from break-value">{{ email.from }}</p>
           <p class="mail-preview">{{ email.preview || '这封邮件没有可预览的正文内容。' }}</p>
           <div class="mail-card-footer">
             <span v-if="email.verificationCode" class="code-badge">验证码 {{ email.verificationCode }}</span>
@@ -199,8 +218,8 @@ async function handleGenerateRandom() {
         <template v-else>
           <div class="panel-header detail-header">
             <div>
-              <h2>{{ activeEmail.subject || '无主题' }}</h2>
-              <p>{{ activeEmail.from }}</p>
+              <h2 class="break-value">{{ activeEmail.subject || '无主题' }}</h2>
+              <p class="break-value">{{ activeEmail.from }}</p>
             </div>
             <div class="detail-actions">
               <button class="ghost-button" @click="copyToClipboard(activeEmail.raw_email, `raw_${activeEmail.id}`)">
@@ -220,13 +239,13 @@ async function handleGenerateRandom() {
           <div class="meta-grid">
             <div v-for="[label, value] in selectedMeta" :key="label" class="meta-item">
               <span>{{ label }}</span>
-              <strong>{{ value }}</strong>
+              <strong class="break-value">{{ value }}</strong>
             </div>
           </div>
 
           <div v-if="activeEmail.verificationCode" class="code-panel">
             <span>提取到验证码</span>
-            <strong>{{ activeEmail.verificationCode }}</strong>
+            <strong class="break-value">{{ activeEmail.verificationCode }}</strong>
           </div>
 
           <div class="tab-row">

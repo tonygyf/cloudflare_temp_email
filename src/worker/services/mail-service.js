@@ -1,10 +1,19 @@
 import PostalMime, { decodeWords } from 'postal-mime';
 import { deserializeRawEmail, serializeRawEmail, toArrayBuffer } from '../utils/raw-email.js';
 
-const VERIFICATION_CODE_PATTERNS = [
-  /(?:验证码|code|Code|CODE|passcode|token|pin)[\s:：-]*([a-zA-Z0-9]{4,8})\b/i,
-  /\b(\d{4,8})\b/
-];
+const VERIFICATION_KEYWORDS = ['验证码', 'verification code', 'code', 'passcode', 'token', 'otp', 'pin'];
+const COMMON_NON_CODE_WORDS = new Set([
+  'your',
+  'code',
+  'verification',
+  'verify',
+  'login',
+  'secure',
+  'account',
+  'trae',
+  'system',
+  'mail'
+]);
 
 function normalizeAddress(address, env) {
   const prefix = String(address || '').toLowerCase().trim().split('@')[0];
@@ -44,14 +53,75 @@ function buildPreview(text = '', html = '') {
   return content.slice(0, 180);
 }
 
-function extractVerificationCode({ subject = '', text = '', html = '' }) {
-  const haystack = [subject, text, htmlToText(html)].filter(Boolean).join(' ');
+function normalizeCandidate(value) {
+  return String(value || '').replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '');
+}
 
-  for (const pattern of VERIFICATION_CODE_PATTERNS) {
-    const match = haystack.match(pattern);
-    if (match) {
-      return match[1];
+function isLikelyVerificationCode(candidate) {
+  const normalizedCandidate = normalizeCandidate(candidate);
+
+  if (normalizedCandidate.length < 4 || normalizedCandidate.length > 10) {
+    return false;
+  }
+
+  if (!/^[a-zA-Z0-9]+$/.test(normalizedCandidate)) {
+    return false;
+  }
+
+  const lowerCandidate = normalizedCandidate.toLowerCase();
+  if (COMMON_NON_CODE_WORDS.has(lowerCandidate)) {
+    return false;
+  }
+
+  // Prefer tokens with digits, or short uppercase codes.
+  if (/\d/.test(normalizedCandidate)) {
+    return true;
+  }
+
+  return /^[A-Z]{4,8}$/.test(normalizedCandidate);
+}
+
+function extractKeywordAnchoredCode(sourceText) {
+  const lines = String(sourceText || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const lowerLine = line.toLowerCase();
+    const hasKeyword = VERIFICATION_KEYWORDS.some((keyword) => lowerLine.includes(keyword));
+
+    if (!hasKeyword) {
+      continue;
     }
+
+    const nearbyText = [line, lines[index + 1] || '', lines[index + 2] || ''].join(' ');
+    const candidates = nearbyText.match(/[A-Za-z0-9]{4,10}/g) || [];
+
+    for (const candidate of candidates) {
+      if (isLikelyVerificationCode(candidate)) {
+        return normalizeCandidate(candidate);
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractVerificationCode({ subject = '', text = '', html = '' }) {
+  const textContent = [subject, text, htmlToText(html)].filter(Boolean).join('\n');
+  const anchoredCode = extractKeywordAnchoredCode(textContent);
+
+  if (anchoredCode) {
+    return anchoredCode;
+  }
+
+  const numericMatch = textContent.match(/\b(\d{4,8})\b/g) || [];
+  const uniqueNumericValues = [...new Set(numericMatch.map((item) => item.trim()))];
+
+  if (uniqueNumericValues.length === 1) {
+    return uniqueNumericValues[0];
   }
 
   return null;
@@ -135,6 +205,27 @@ export async function listEmailsByAddress(address, env) {
   );
 
   return formattedResults;
+}
+
+export async function listKnownAddresses(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT
+       address,
+       COUNT(*) AS email_count,
+       MAX(created_at) AS latest_created_at,
+       MAX(id) AS latest_id
+     FROM emails
+     GROUP BY address
+     ORDER BY latest_id DESC
+     LIMIT 30`
+  ).all();
+
+  return results.map((row) => ({
+    address: row.address,
+    prefix: String(row.address || '').split('@')[0] || '',
+    emailCount: Number(row.email_count || 0),
+    latestCreatedAt: row.latest_created_at || null
+  }));
 }
 
 export async function deleteEmailById(id, address, env) {

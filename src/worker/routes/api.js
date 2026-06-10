@@ -1,4 +1,4 @@
-import { deleteEmailById, getPublicConfig, listEmailsByAddress } from '../services/mail-service.js';
+import { deleteEmailById, getPublicConfig, listEmailsByAddress, listKnownAddresses } from '../services/mail-service.js';
 import { apiError, apiJson, handleApiOptions } from '../utils/http.js';
 
 export async function handleApiRequest(request, env, url) {
@@ -13,6 +13,15 @@ export async function handleApiRequest(request, env, url) {
 
   if (request.method === 'GET' && url.pathname === '/api/config') {
     return apiJson(getPublicConfig(env));
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/addresses') {
+    try {
+      return apiJson(await listKnownAddresses(env));
+    } catch (error) {
+      console.error('Failed to fetch known addresses:', error);
+      return apiError(error.message || 'Failed to fetch addresses');
+    }
   }
 
   if (request.method === 'GET' && url.pathname === '/api/emails') {
