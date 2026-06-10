@@ -4,9 +4,19 @@
   "private": true,
   "main": "worker.js",
   "scripts": {
-    "deploy": "wrangler deploy"
+    "build": "npm run build:frontend && npm run build:bundle",
+    "build:frontend": "vite build --config frontend/vite.config.js",
+    "build:bundle": "node scripts/generate-frontend-bundle.mjs",
+    "dev": "wrangler dev",
+    "dev:frontend": "vite --config frontend/vite.config.js"
   },
   "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "vite": "^5.4.21",
+    "vue": "^3.5.35",
     "wrangler": "^3.0.0"
+  },
+  "dependencies": {
+    "postal-mime": "^2.7.4"
   }
 }

@@ -1,0 +1,520 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  background:
+    radial-gradient(circle at top, rgba(99, 102, 241, 0.18), transparent 35%),
+    linear-gradient(180deg, #f6f7fb 0%, #edf2ff 100%);
+  color: #111827;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.layout-shell {
+  width: min(1320px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.hero-card,
+.control-card,
+.panel {
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 24px;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+}
+
+.hero-card,
+.control-card {
+  padding: 28px;
+  margin-bottom: 20px;
+}
+
+.hero-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+  gap: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: #4f46e5;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hero-card h1,
+.control-heading h2,
+.panel-header h2 {
+  margin: 0;
+}
+
+.hero-card h1 {
+  font-size: clamp(32px, 5vw, 44px);
+  line-height: 1.05;
+}
+
+.hero-copy {
+  margin: 14px 0 0;
+  max-width: 720px;
+  color: #475569;
+  font-size: 16px;
+}
+
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-card,
+.meta-item,
+.code-panel,
+.history-chip,
+.mail-card,
+.toggle-pill,
+.address-input,
+.domain-pill,
+.full-address {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.stat-card,
+.meta-item {
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(248, 250, 252, 0.88);
+}
+
+.stat-label,
+.meta-item span,
+.full-address span,
+.history-header span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.stat-card strong,
+.meta-item strong,
+.full-address strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 16px;
+}
+
+.control-heading,
+.panel-header,
+.mail-card-header,
+.mail-card-footer,
+.history-header,
+.detail-actions,
+.toolbar-row,
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.control-heading p,
+.detail-header p {
+  margin: 6px 0 0;
+  color: #64748b;
+}
+
+.address-builder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.address-input,
+.domain-pill,
+.full-address,
+.toggle-pill,
+.mail-card,
+.history-chip {
+  border-radius: 18px;
+}
+
+.address-input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  background: #fff;
+}
+
+.address-prefix {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.address-input input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  padding: 18px 0;
+  background: transparent;
+  font-size: 16px;
+}
+
+.domain-pill,
+.toggle-pill,
+.full-address {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  background: rgba(248, 250, 252, 0.88);
+}
+
+.toolbar-row {
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.toggle-pill {
+  min-height: 48px;
+}
+
+.toggle-pill input {
+  inline-size: 18px;
+  block-size: 18px;
+}
+
+.full-address {
+  justify-content: space-between;
+  margin-top: 16px;
+  min-height: 58px;
+}
+
+.history-block {
+  margin-top: 18px;
+}
+
+.history-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.history-chip {
+  padding: 10px 14px;
+  background: rgba(248, 250, 252, 0.95);
+  color: #334155;
+}
+
+.history-chip.active {
+  background: rgba(79, 70, 229, 0.1);
+  color: #3730a3;
+  border-color: rgba(79, 70, 229, 0.3);
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.panel {
+  padding: 22px;
+  min-height: 640px;
+}
+
+.inbox-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mail-card {
+  padding: 18px;
+  text-align: left;
+  background: #fff;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.mail-card:hover,
+.mail-card.active {
+  transform: translateY(-1px);
+  border-color: rgba(79, 70, 229, 0.35);
+  box-shadow: 0 18px 32px rgba(79, 70, 229, 0.1);
+}
+
+.mail-card-header strong,
+.detail-header h2 {
+  font-size: 18px;
+}
+
+.mail-card-header span,
+.mail-from,
+.mail-preview,
+.muted-badge {
+  color: #64748b;
+}
+
+.mail-from,
+.mail-preview {
+  margin: 8px 0 0;
+}
+
+.mail-preview {
+  font-size: 14px;
+}
+
+.mail-card-footer {
+  margin-top: 12px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.code-badge,
+.muted-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.1);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.code-badge {
+  color: #4338ca;
+}
+
+.muted-badge {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.detail-actions {
+  flex-wrap: wrap;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.code-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(37, 99, 235, 0.08));
+}
+
+.code-panel span {
+  color: #4338ca;
+  font-weight: 700;
+}
+
+.code-panel strong {
+  font-size: 28px;
+  letter-spacing: 0.16em;
+  color: #312e81;
+}
+
+.tab-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tab-button,
+.ghost-button,
+.primary-button,
+.secondary-button,
+.danger-button,
+.text-button {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-weight: 700;
+}
+
+.tab-button {
+  background: rgba(226, 232, 240, 0.7);
+  color: #334155;
+}
+
+.tab-button.active {
+  background: #111827;
+  color: #fff;
+}
+
+.ghost-button,
+.text-button {
+  background: rgba(241, 245, 249, 0.9);
+  color: #334155;
+}
+
+.primary-button {
+  background: linear-gradient(135deg, #4f46e5, #2563eb);
+  color: #fff;
+}
+
+.secondary-button {
+  background: rgba(79, 70, 229, 0.1);
+  color: #4338ca;
+}
+
+.danger-button {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
+.text-button {
+  min-height: auto;
+  padding: 0;
+}
+
+.reader-frame,
+.reader-text {
+  min-height: 420px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: #fff;
+}
+
+.reader-frame {
+  overflow: hidden;
+}
+
+.reader-frame iframe {
+  inline-size: 100%;
+  block-size: 100%;
+  min-height: 420px;
+  border: 0;
+}
+
+.reader-text {
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+}
+
+.raw-text {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.empty-state,
+.error-banner {
+  padding: 28px 18px;
+  border-radius: 18px;
+  text-align: center;
+  color: #64748b;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.empty-state.large {
+  min-height: 420px;
+  display: grid;
+  place-items: center;
+}
+
+.error-banner {
+  margin-top: 16px;
+  color: #b91c1c;
+  background: rgba(254, 226, 226, 0.88);
+}
+
+@media (max-width: 1100px) {
+  .hero-card,
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .layout-shell {
+    width: min(100% - 20px, 100%);
+    padding-top: 18px;
+  }
+
+  .hero-card,
+  .control-card,
+  .panel {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .hero-stats,
+  .meta-grid,
+  .address-builder {
+    grid-template-columns: 1fr;
+  }
+
+  .control-heading,
+  .panel-header,
+  .detail-header,
+  .toolbar-row,
+  .full-address {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .detail-actions {
+    width: 100%;
+  }
+
+  .detail-actions > * {
+    flex: 1 1 100%;
+  }
+
+  .code-panel {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
